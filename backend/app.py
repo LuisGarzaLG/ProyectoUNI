@@ -1,27 +1,29 @@
-# app.py
-
 from flask import Flask, request, jsonify
-from simulador import correr_simulacion
-from flask_cors import CORS
+import subprocess
+import tempfile
+import json
 
 app = Flask(__name__)
-CORS(app)
 
 @app.route('/simular', methods=['POST'])
 def simular():
-    params = request.json
+    datos = request.get_json()
 
-    df = correr_simulacion(
-        num_personas=params.get('num_personas', 100),
-        tiempo_entre_llegadas=params.get('tiempo_entre_llegadas', 10),
-        tiempo_simulacion=params.get('tiempo_simulacion', 1000),
-        duracion_bn=tuple(params.get('duracion_bn', [1, 3])),
-        duracion_color=tuple(params.get('duracion_color', [4, 10])),
-        impresoras_bn=params.get('impresoras_bn', 1),
-        impresoras_color=params.get('impresoras_color', 1)
-    )
+    with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp_json:
+        json.dump(datos, temp_json)
+        temp_json.flush()
 
-    return jsonify(df.to_dict(orient='records'))
+        resultado = subprocess.run(
+            ['python3', 'simulador.py', temp_json.name],
+            capture_output=True,
+            text=True
+        )
+
+        if resultado.returncode != 0:
+            return jsonify({'error': 'Error al ejecutar simulación'}), 500
+
+        output = json.loads(resultado.stdout)
+        return jsonify(output)
 
 if __name__ == '__main__':
     app.run(debug=True)
